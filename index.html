@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>地層のでき方シミュレーター</title>
+<style>
+:root{--bg:#f4f1ea;--panel:#fffdf8;--ink:#2e2a24;--sub:#6b6357;--line:#ddd5c6;--accent:#2f6fa8;--warm:#b8742e}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"BIZ UDPGothic","Hiragino Kaku Gothic ProN","Hiragino Sans","Meiryo",sans-serif;font-size:15px;line-height:1.6}
+.wrap{max-width:1000px;margin:0 auto;padding:10px 12px 16px}
+h1{font-size:20px;margin:2px 0 2px}
+.lead{margin:0 0 8px;color:var(--sub);font-size:14px}
+rt{font-size:9px}
+.stage{display:grid;grid-template-columns:5fr 1fr;gap:6px;background:#2d2a26;padding:6px;border-radius:10px}
+canvas{width:100%;height:auto;display:block;border-radius:6px}
+#main{cursor:crosshair;touch-action:manipulation}
+.status{margin:6px 2px 0;font-size:13px;color:var(--sub);display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.pill{display:inline-flex;align-items:center;gap:4px;background:#fff;border:1px solid var(--line);border-radius:99px;padding:0 9px;font-variant-numeric:tabular-nums;min-width:74px}
+.pill i{display:inline-block;width:10px;height:10px;border-radius:50%}
+.msg{margin-top:6px;background:#fff8e6;border:1px solid #ecd9a8;border-radius:10px;padding:8px 12px;min-height:46px;font-size:15px}
+.msg p{margin:2px 0}
+.controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:10px;margin-top:10px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.card h2{font-size:15px;margin:2px 0 6px}
+.card h2:not(:first-child){margin-top:10px}
+button{font:inherit;cursor:pointer;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink);padding:6px 10px}
+button:hover:not(:disabled){background:#f3efe6}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.main{background:var(--accent);color:#fff;border:none;font-size:18px;padding:10px;width:100%;font-weight:bold;margin-top:10px}
+button.main:hover:not(:disabled){background:#255b8b}
+button.time{background:var(--warm);color:#fff;border:none;width:100%;font-weight:bold;padding:9px;margin-top:8px}
+button.time:hover:not(:disabled){background:#9a5f22}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:8px;padding:4px 10px;background:#fff;cursor:pointer;user-select:none}
+.chip input{width:18px;height:18px;margin:0}
+.chip small{color:var(--sub);font-size:11px}
+.sw{width:14px;height:14px;border-radius:3px;display:inline-block}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg label{flex:1;position:relative;cursor:pointer}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg span{display:block;text-align:center;padding:6px 4px;background:#fff;border-right:1px solid var(--line)}
+.seg label:last-child span{border-right:none}
+.seg input:checked+span{background:var(--accent);color:#fff;font-weight:bold}
+.row{display:flex;gap:6px;flex-wrap:wrap}
+.row button{flex:1;font-size:16px}
+.note{font-size:13px;color:var(--sub);margin:8px 0 0}
+#log{margin:4px 0 8px;padding-left:4px;list-style:none;max-height:130px;overflow:auto;font-size:13px;border:1px solid var(--line);border-radius:8px;background:#fff;min-height:40px}
+#log li{padding:2px 6px;border-bottom:1px dashed #eee6d6}
+#log li:last-child{border-bottom:none}
+.challenge{margin-top:10px}
+.challenge summary{font-weight:bold;cursor:pointer}
+.challenge ol{margin:6px 0 0;padding-left:22px}
+.challenge li{margin-bottom:4px}
+.challenge .ans{color:var(--sub);font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🌊 地層のでき方シミュレーター</h1>
+  <p class="lead">水のはたらきで運ばれた「れき・砂・泥」は、どんな順に<ruby>積<rt>つ</rt></ruby>もるのかな？ 水を流すタイミングを変えると、地層はどう変わるかな？</p>
+
+  <div class="stage">
+    <canvas id="main"></canvas>
+    <canvas id="col"></canvas>
+  </div>
+  <div class="status" id="status"></div>
+  <div class="msg" id="msg"></div>
+
+  <div class="controls">
+    <section class="card">
+      <h2>① 流れこむ土</h2>
+      <div class="chips">
+        <label class="chip"><input type="checkbox" id="cG" checked><span class="sw" style="background:#8a8178"></span>れき<small>2mm以上</small></label>
+        <label class="chip"><input type="checkbox" id="cS" checked><span class="sw" style="background:#dcbc7a"></span>砂<small>2〜0.06mm</small></label>
+        <label class="chip"><input type="checkbox" id="cM" checked><span class="sw" style="background:#845f42"></span>泥<small>0.06mm以下</small></label>
+      </div>
+      <h2>② 水のいきおい</h2>
+      <div class="seg">
+        <label><input type="radio" name="flow" value="1.3" data-label="弱い"><span>弱い</span></label>
+        <label><input type="radio" name="flow" value="2.4" data-label="ふつう" checked><span>ふつう</span></label>
+        <label><input type="radio" name="flow" value="3.8" data-label="強い"><span>強い</span></label>
+      </div>
+      <button class="main" id="pourBtn">🌊 水を流す</button>
+    </section>
+
+    <section class="card">
+      <h2>③ 生き物を入れる</h2>
+      <div class="row">
+        <button data-kind="shell">🐚 貝</button>
+        <button data-kind="fish">🐟 魚</button>
+        <button data-kind="leaf">🍃 木の葉</button>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <button data-kind="ammo">🌀 アンモナイト</button>
+        <button data-kind="dino">🦕 恐竜（大）</button>
+      </div>
+      <p class="note">しずんだ生き物が土にうもれたまま、長い時間がたつと…？</p>
+      <button class="time" id="timeBtn">⏳ 長い時間（何万年も）を進める</button>
+    </section>
+
+    <section class="card">
+      <h2>④ 記録</h2>
+      <ol id="log"></ol>
+      <h2>しずむようすの速さ</h2>
+      <div class="seg">
+        <label><input type="radio" name="spd" value="0.4"><span>ゆっくり</span></label>
+        <label><input type="radio" name="spd" value="1.5" checked><span>ふつう</span></label>
+        <label><input type="radio" name="spd" value="4"><span>はやい</span></label>
+      </div>
+      <button id="resetBtn" style="width:100%;margin-top:10px">🔄 はじめから</button>
+    </section>
+  </div>
+
+  <details class="card challenge">
+    <summary>🔍 チャレンジ（やってみよう）</summary>
+    <ol>
+      <li>「れき・砂・泥」を全部えらんで1回流そう。どの順にしずみきるかな？ 地層をタップして<ruby>柱状図<rt>ちゅうじょうず</rt></ruby>でも確かめよう。</li>
+      <li>しずみきってから、もう1回同じように流すと、地層はどうなるかな？</li>
+      <li>「はじめから」にして、1回目は「泥だけ」、2回目は「れきと砂」を流してみよう。<br><span class="ans">→ 泥の上にれきがのることもあるね。地層の順番は、つぶの大きさだけでなく「いつ・どんな水が流れたか」で決まるんだ。</span></li>
+      <li>しずみきる前に、すぐ次の水を流すと、層のさかい目はどうなるかな？</li>
+      <li>水のいきおいを変えて、れきや砂が運ばれるきょりをくらべよう。</li>
+      <li>①貝を入れて土を流してから時間を進める　②貝を入れてすぐに時間を進める　…化石になるのはどっち？</li>
+      <li>恐竜を入れて、土を1回だけ流してから時間を進めると？ 恐竜を化石にするには、何回土を流せばいいかな？<br><span class="ans">→ 大きな生き物ほど、全部うもれるのにたくさんの土が必要だね。</span></li>
+    </ol>
+  </details>
+</div>
+
+<script>
+(()=>{
+const W=800,H=480,CS=4,COLS=W/CS,ROWS=H/CS,WT=20; // WT = water top row
+const GRAVEL=1,SAND=2,MUD=3;
+const NAME={1:'れき',2:'砂',3:'泥'},ROCKNAME={1:'れき岩',2:'砂岩',3:'泥岩'};
+const PROP={1:{vs:1.7,drag:0.95,slip:0.5,amount:260},2:{vs:0.75,drag:0.975,slip:0.8,amount:650},3:{vs:0.16,drag:0.986,slip:0.97,amount:900}};
+const BASE={gbg:[150,140,126],peb:[[134,126,118],[156,132,110],[112,110,106],[168,158,144]],sand:[220,188,122],sandDot:[170,140,86],mud:[132,95,66]};
+const ROCK={gbg:[110,102,92],peb:[[98,92,86],[116,98,82],[82,80,78],[126,118,108]],sand:[170,144,96],sandDot:[124,100,64],mud:[94,68,49]};
+const EXPL={1:'（つぶが大きく重いので、すぐにしずむ）',2:'（れきより小さいので、少しおくれてしずむ）',3:'（つぶがとても小さく軽いので、ゆっくりしずむ。水がにごっていたのは泥のせいだよ）'};
+const KIND={
+  shell:{name:'貝',icon:'🐚',h:6,hw:10,sp:2.2},
+  fish:{name:'魚',icon:'🐟',h:5,hw:15,sp:1.0},
+  leaf:{name:'木の葉',icon:'🍃',h:4,hw:12,sp:0.55},
+  ammo:{name:'アンモナイト',icon:'🌀',h:11,hw:11,sp:1.6},
+  dino:{name:'恐竜',icon:'🦕',h:15,hw:38,sp:1.4,big:true}
+};
+
+const grid=new Uint8Array(COLS*ROWS),shade=new Float32Array(COLS*ROWS),rock=new Uint8Array(COLS*ROWS);
+const idx=(c,r)=>r*COLS+c;
+const dpr=Math.max(1,Math.min(2,Math.round(window.devicePixelRatio||1)));
+const $=id=>document.getElementById(id);
+const main=$('main'),ctx=main.getContext('2d');
+main.width=W*dpr;main.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);
+const CW=160,colC=$('col'),sctx=colC.getContext('2d');
+colC.width=CW*dpr;colC.height=H*dpr;sctx.setTransform(dpr,0,0,dpr,0,0);
+const gcan=document.createElement('canvas');gcan.width=W*dpr;gcan.height=H*dpr;
+const gctx=gcan.getContext('2d');gctx.setTransform(dpr,0,0,dpr,0,0);
+
+let parts=[],creatures=[],pour=null,speed=1.5,acc=0,selCol=-1,colDirty=true,full=false,timeAnim=null,eventNo=0,pourWatch=null,frame=0,lastStatus='';
+
+const clamp=v=>v<0?0:v>255?255:v|0;
+const rgb=(a,f=0)=>{const m=1+f;return `rgb(${clamp(a[0]*m)},${clamp(a[1]*m)},${clamp(a[2]*m)})`;};
+
+/* ---------- sediment cells ---------- */
+function drawCell(c,r){
+  const i=idx(c,r),t=grid[i];if(!t)return;
+  const x=c*CS,y=r*CS,s=shade[i],P=rock[i]?ROCK:BASE;
+  if(t===GRAVEL){
+    gctx.fillStyle=rgb(P.gbg,s*0.06);gctx.fillRect(x,y,CS,CS);
+    const pc=P.peb[(Math.abs(s*997)|0)%P.peb.length];
+    gctx.beginPath();gctx.arc(x+2,y+2,2.5,0,6.2832);gctx.fillStyle=rgb(pc,s*0.1);gctx.fill();
+    gctx.lineWidth=0.7;gctx.strokeStyle='rgba(50,42,34,.5)';gctx.stroke();
+  }else if(t===SAND){
+    gctx.fillStyle=rgb(P.sand,s*0.07);gctx.fillRect(x,y,CS,CS);
+    const k=Math.abs(s*1000)|0;gctx.fillStyle=rgb(P.sandDot);gctx.fillRect(x+(k%3),y+((k>>2)%3),1,1);
+  }else{
+    gctx.fillStyle=rgb(P.mud,s*0.05);gctx.fillRect(x,y,CS,CS);
+  }
+}
+function drawAll(){gctx.clearRect(0,0,W,H);for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)if(grid[idx(c,r)])drawCell(c,r);}
+function surfaceRow(c){for(let r=0;r<ROWS;r++)if(grid[idx(c,r)])return r;return ROWS;}
+function place(c,r,t){
+  if(r<0)return;
+  const i=idx(c,r);grid[i]=t;shade[i]=Math.random()*2-1;rock[i]=0;drawCell(c,r);colDirty=true;
+  if(r<=WT+2&&!full){full=true;pour=null;setMsg('<p>水そうが土でいっぱいになりました！「🔄 はじめから」でやり直そう。</p>');setButtons();}
+}
+function settle(c,r,t){
+  while(r>0&&grid[idx(c,r)])r--;
+  for(let g=0;g<300;g++){
+    if(r+1>=ROWS)break;
+    if(!grid[idx(c,r+1)]){r++;continue;}
+    if(Math.random()<PROP[t].slip){
+      const d=Math.random()<.5?-1:1;let moved=false;
+      for(const dd of [d,-d]){const nc=c+dd;if(nc>=0&&nc<COLS&&!grid[idx(nc,r)]&&!grid[idx(nc,r+1)]){c=nc;r++;moved=true;break;}}
+      if(moved)continue;
+    }
+    break;
+  }
+  place(c,r,t);
+}
+
+/* ---------- pouring & particles ---------- */
+function emit(){
+  if(!pour)return;
+  for(const t of pour.types){
+    pour.acc[t]+=PROP[t].amount/pour.steps;
+    while(pour.acc[t]>=1){pour.acc[t]-=1;parts.push({t,x:12+Math.random()*4,y:WT+Math.random()*1.5,vx:pour.flow*(0.6+Math.random()*0.8)});}
+  }
+  if(--pour.left<=0)pour=null;
+}
+function stepParts(){
+  for(let i=parts.length-1;i>=0;i--){
+    const p=parts[i],pr=PROP[p.t];
+    p.vx*=pr.drag;
+    let vy=pr.vs*(0.75+Math.random()*0.5);
+    if(p.t===MUD){p.vx+=(Math.random()-.5)*0.1;vy+=(Math.random()-.5)*0.08;}
+    let dx=p.vx,dy=vy;
+    const n=Math.max(1,Math.ceil(Math.max(Math.abs(dx),Math.abs(dy))));
+    let landed=false;
+    for(let k=0;k<n;k++){
+      let nx=p.x+dx/n,ny=p.y+dy/n;
+      if(nx<0){nx=0;p.vx=Math.abs(p.vx)*0.5;dx=0;}
+      if(nx>COLS-0.01){nx=COLS-0.01;p.vx=-Math.abs(p.vx)*0.5;dx=0;}
+      if(ny<WT)ny=WT;
+      const c=nx|0,r=ny|0;
+      if(r>=ROWS||grid[idx(c,r)]){settle(p.x|0,Math.min(ROWS-1,p.y|0),p.t);landed=true;break;}
+      p.x=nx;p.y=ny;
+    }
+    if(landed){parts[i]=parts[parts.length-1];parts.pop();}
+  }
+}
+
+/* ---------- creatures ---------- */
+function stepCreatures(){
+  for(const cr of creatures){
+    if(cr.state!=='fall')continue;
+    cr.phase+=0.08;
+    const k=KIND[cr.kind];
+    cr.y+=k.sp;
+    if(cr.kind==='leaf'){cr.x+=Math.sin(cr.phase)*0.9;cr.rot=Math.sin(cr.phase)*0.5;}
+    if(cr.kind==='fish'){cr.rot+=(0.25-cr.rot)*0.01;}
+    if(cr.kind==='ammo'){cr.rot+=0.01;}
+    cr.x=Math.max(k.hw+4,Math.min(W-k.hw-4,cr.x));
+    const below=((cr.y+cr.h)/CS)|0;
+    let hit=below>=ROWS;
+    if(!hit)for(let x=cr.x-k.hw*0.7;x<=cr.x+k.hw*0.7;x+=CS){const c=Math.max(0,Math.min(COLS-1,(x/CS)|0));if(grid[idx(c,below)]){hit=true;break;}}
+    if(hit){
+      cr.state='rest';cr.y=Math.min(below,ROWS)*CS-cr.h;
+      cr.rot=cr.kind==='dino'?(Math.random()-.5)*0.08:cr.kind==='ammo'?Math.random()*6.28:(Math.random()-.5)*0.35;colDirty=true;
+    }
+  }
+}
+function isBuried(cr){
+  const k=KIND[cr.kind],top=(cr.y-cr.h)/CS;let m=99;
+  const c1=Math.max(0,((cr.x-k.hw*0.8)/CS)|0),c2=Math.min(COLS-1,((cr.x+k.hw*0.8)/CS)|0);
+  for(let c=c1;c<=c2;c++)m=Math.min(m,top-surfaceRow(c));
+  return m>=2;
+}
+function drawCreature(g,cr,x,y,scale){
+  const f=cr.fossil;
+  g.save();g.globalAlpha=cr.alpha;g.translate(x,y);g.rotate(cr.rot);g.scale(scale,scale);
+  if(f){const k=KIND[cr.kind];g.fillStyle='#6c6358';g.beginPath();g.ellipse(0,0,k.hw+5,k.h+5,0,0,6.2832);g.fill();}
+  const ln=f?'#f1e8d6':null;g.lineJoin='round';g.lineCap='round';
+  if(cr.kind==='shell'){
+    g.beginPath();g.moveTo(0,5);g.arc(0,5,10,Math.PI*1.12,Math.PI*1.88);g.closePath();
+    g.fillStyle=f?'#a39684':'#f4b183';g.fill();g.lineWidth=1.3;g.strokeStyle=ln||'#b05f2c';g.stroke();
+    g.lineWidth=0.9;for(let a=1.25;a<=1.751;a+=0.125){g.beginPath();g.moveTo(0,5);g.lineTo(Math.cos(Math.PI*a)*9.5,5+Math.sin(Math.PI*a)*9.5);g.stroke();}
+  }else if(cr.kind==='fish'){
+    if(!f){
+      g.beginPath();g.ellipse(0,0,10,4.5,0,0,6.2832);g.fillStyle='#86abc9';g.fill();g.lineWidth=1.1;g.strokeStyle='#3d6585';g.stroke();
+      g.beginPath();g.moveTo(8,0);g.lineTo(15,-5);g.lineTo(15,5);g.closePath();g.fillStyle='#86abc9';g.fill();g.stroke();
+      g.beginPath();g.arc(-6,-1,1.2,0,6.2832);g.fillStyle='#223';g.fill();
+    }else{
+      g.strokeStyle=ln;g.lineWidth=1.2;
+      g.beginPath();g.moveTo(-6,0);g.lineTo(9,0);g.stroke();
+      g.beginPath();g.arc(-8.5,0,3.3,0,6.2832);g.stroke();
+      g.lineWidth=0.9;for(let x=-4;x<=7;x+=2){const hh=4.2-Math.abs(x-1)*0.25;g.beginPath();g.moveTo(x+1,-hh);g.quadraticCurveTo(x,0,x+1,hh);g.stroke();}
+      g.beginPath();g.moveTo(9,0);g.lineTo(14,-4);g.moveTo(9,0);g.lineTo(14.5,0);g.moveTo(9,0);g.lineTo(14,4);g.stroke();
+    }
+  }else if(cr.kind==='ammo'){
+    g.beginPath();g.arc(0,0,11,0,6.2832);g.fillStyle=f?'#9a8d7b':'#c98f5a';g.fill();
+    g.lineWidth=1.3;g.strokeStyle=ln||'#7a4a22';g.stroke();
+    g.beginPath();for(let t=0;t<=12.6;t+=0.15){const r=10.5*Math.exp(-0.16*t);const x=Math.cos(t)*r,y=Math.sin(t)*r;t?g.lineTo(x,y):g.moveTo(x,y);}g.stroke();
+    g.lineWidth=0.8;for(let a=0;a<6.28;a+=0.39){g.beginPath();g.moveTo(Math.cos(a)*7.5,Math.sin(a)*7.5);g.lineTo(Math.cos(a)*10.8,Math.sin(a)*10.8);g.stroke();}
+  }else if(cr.kind==='dino'){
+    if(!f){
+      const body='#8aa66a',edge='#4d6638';
+      g.fillStyle=body;g.strokeStyle=edge;g.lineWidth=1.2;
+      g.beginPath();g.moveTo(14,-4);g.quadraticCurveTo(28,0,38,7);g.quadraticCurveTo(26,6,14,8);g.closePath();g.fill();g.stroke();
+      g.lineWidth=6;g.strokeStyle=body;g.beginPath();g.moveTo(-12,-2);g.quadraticCurveTo(-20,-6,-26,-10);g.stroke();
+      g.lineWidth=1.2;g.strokeStyle=edge;
+      g.fillStyle=body;g.beginPath();g.ellipse(-29,-11,5.5,3.8,0,0,6.2832);g.fill();g.stroke();
+      g.fillRect(-11,8,5,8);g.strokeRect(-11,8,5,8);g.fillRect(8,8,5,8);g.strokeRect(8,8,5,8);
+      g.beginPath();g.ellipse(0,1,18,10,0,0,6.2832);g.fill();g.stroke();
+      g.beginPath();g.arc(-31,-12,0.9,0,6.2832);g.fillStyle='#223';g.fill();
+    }else{
+      g.strokeStyle=ln;g.lineWidth=1.6;
+      g.beginPath();g.moveTo(-25,-10);g.quadraticCurveTo(-16,-3,-8,-5);g.quadraticCurveTo(4,-8,15,-3);g.quadraticCurveTo(28,1,38,7);g.stroke();
+      g.beginPath();g.ellipse(-29,-11,5.5,3.8,0,0,6.2832);g.stroke();
+      g.beginPath();g.arc(-30.5,-12,1.3,0,6.2832);g.stroke();
+      g.lineWidth=1;
+      for(let x=-8;x<=12;x+=3){const y0=x<2?-5-(x+8)*0.25:-7.5+(x-2)*0.45;g.beginPath();g.moveTo(x,y0);g.quadraticCurveTo(x-2,y0+7,x+1,y0+12);g.stroke();}
+      g.lineWidth=1.4;
+      g.beginPath();g.moveTo(-8,2);g.lineTo(-10,9);g.lineTo(-8,16);g.moveTo(10,2);g.lineTo(11,9);g.lineTo(14,16);g.stroke();
+      g.beginPath();g.ellipse(-6,2,4,2.5,0,0,6.2832);g.ellipse(11,2,4,2.5,0,0,6.2832);g.stroke();
+      g.fillStyle=ln;for(let t=0.1;t<1;t+=0.15){g.beginPath();g.arc(15+23*t,-3+10*t*t,1,0,6.2832);g.fill();}
+    }
+  }else{
+    g.beginPath();g.moveTo(-11,0);g.quadraticCurveTo(0,-7,11,0);g.quadraticCurveTo(0,7,-11,0);
+    g.fillStyle=f?'#8c8070':'#7cb45c';g.fill();g.lineWidth=1.1;g.strokeStyle=ln||'#3f7a2c';g.stroke();
+    g.lineWidth=0.8;g.beginPath();g.moveTo(-14,1);g.lineTo(11,0);g.stroke();
+    for(let x=-6;x<=6;x+=4){g.beginPath();g.moveTo(x,0);g.lineTo(x+3,-3.5);g.moveTo(x,0);g.lineTo(x+3,3.5);g.stroke();}
+  }
+  g.restore();
+}
+function addCreature(kind){
+  if(timeAnim||full)return;
+  const k=KIND[kind];
+  creatures.push({kind,x:150+Math.random()*560,y:WT*CS+k.h+2,h:k.h,state:'fall',phase:Math.random()*6,rot:0,alpha:1,fossil:false,gone:false});
+  addLog(`${k.icon} ${k.name}を入れた`);
+  if(kind==='dino')setMsg('<p>🦕 川に流されてきた大きな恐竜の死がいが、しずんでいくよ。体全体がうもれるには、土がどれくらい必要かな？</p>');
+  else setMsg(`<p>${k.icon} 死んだ${k.name}がしずんでいくよ。このあと土を流すと、どうなるかな？</p>`);
+}
+
+/* ---------- long time ---------- */
+function startTime(){
+  if(timeAnim)return;
+  pourWatch=null;
+  let g=0;while((parts.length||pour||creatures.some(c=>c.state==='fall'))&&g<8000){stepSim();g++;}
+  timeAnim={f:0};setButtons();
+}
+function applyTime(){
+  let any=false;for(let i=0;i<grid.length;i++)if(grid[i]){rock[i]=1;any=true;}
+  drawAll();
+  let fos=0,lost=0,bigLost=false,bigFos=false;
+  for(const cr of creatures){
+    if(cr.state!=='rest'||cr.fossil||cr.gone)continue;
+    if(isBuried(cr)){cr.fossil=true;fos++;if(KIND[cr.kind].big)bigFos=true;}else{cr.gone=true;lost++;if(KIND[cr.kind].big)bigLost=true;}
+  }
+  addLog('⏳ 長い時間が流れた');
+  let h='';
+  if(any)h+='<p>上に積もった土の重みで長い時間おしかためられ、<b>れき→れき岩、砂→砂岩、泥→泥岩</b>になりました（色がこくなった部分）。</p>';
+  else h+='<p>まだ地層がありません。先に水を流してみよう。</p>';
+  if(fos)h+=`<p>🦴 土の中にうもれていた生き物 ${fos}こ が<b>化石</b>になりました！</p>`;
+  if(lost)h+=`<p>うもれずに底に出ていた生き物 ${lost}こ は、くさったり食べられたりして、なくなってしまいました。化石になるには、<b>すぐに土にうもれる</b>ことが大切なんだね。</p>`;
+  if(bigLost)h+='<p>🦕 恐竜のような大きな生き物は、体全体がうもれるまでに、たくさんの土が必要なんだね。</p>';
+  if(bigFos)h+='<p>🦕 恐竜の骨が化石になった！ 体全体が土にうもれたから化石として残ったんだね。</p>';
+  setMsg(h);colDirty=true;
+}
+
+/* ---------- column (柱状図) ---------- */
+const PAT={};
+function makePat(t,rk){
+  const c=document.createElement('canvas');c.width=12;c.height=12;const x=c.getContext('2d');
+  const base={1:[204,196,184],2:[240,216,160],3:[186,152,122]}[t];
+  x.fillStyle=rgb(base,rk?-0.2:0);x.fillRect(0,0,12,12);
+  x.strokeStyle=x.fillStyle=rk?'#2e2620':'#4a4038';x.lineWidth=1;
+  if(t===1){for(const [a,b] of [[3,3],[9,9]]){x.beginPath();x.arc(a,b,2.4,0,6.2832);x.stroke();}}
+  else if(t===2){for(const [a,b] of [[2,2],[8,4],[5,8],[10,10],[1,10],[11,1]])x.fillRect(a,b,1.3,1.3);}
+  else{x.beginPath();x.moveTo(0,3.5);x.lineTo(6,3.5);x.moveTo(5,9.5);x.lineTo(12,9.5);x.stroke();}
+  return sctx.createPattern(c,'repeat');
+}
+for(const t of [1,2,3])for(const rk of [0,1])PAT[t+'_'+rk]=makePat(t,rk);
+
+function drawColumn(){
+  sctx.clearRect(0,0,CW,H);
+  sctx.fillStyle='#f7f2e8';sctx.fillRect(0,0,CW,H);
+  sctx.textAlign='center';sctx.fillStyle='#3a332b';sctx.font='bold 16px sans-serif';sctx.fillText('柱状図',CW/2,26);
+  sctx.font='11px sans-serif';sctx.fillStyle='#7a7064';sctx.fillText('ちゅうじょうず',CW/2,42);
+  if(selCol<0){
+    sctx.font='14px sans-serif';sctx.fillStyle='#5b5248';
+    ['地層を','タップすると','その場所の','柱状図が','見られるよ','👆'].forEach((s,i)=>sctx.fillText(s,CW/2,150+i*24));
+    return;
+  }
+  const rows=[];
+  for(let r=0;r<ROWS;r++){
+    const cnt=[0,0,0,0],rk=[0,0,0,0];
+    for(let dc=-1;dc<=1;dc++){const c=Math.max(0,Math.min(COLS-1,selCol+dc)),i=idx(c,r);cnt[grid[i]]++;if(rock[i])rk[grid[i]]++;}
+    let b=0;for(let t=1;t<=3;t++)if(cnt[t]>cnt[b]||(b===0&&cnt[t]>0&&cnt[t]>=cnt[0]))b=t;
+    rows.push({t:b,rk:rk[b]>0?1:0});
+  }
+  let runs=[];
+  for(let r=0;r<ROWS;r++){const o=rows[r],L=runs[runs.length-1];if(L&&L.t===o.t&&L.rk===o.rk&&L.e===r-1)L.e=r;else runs.push({t:o.t,rk:o.rk,s:r,e:r});}
+  runs=runs.filter(u=>u.t);
+  const out=[];
+  for(const u of runs){const L=out[out.length-1];if(L&&L.e===u.s-1&&(u.e-u.s<1||(L.t===u.t&&L.rk===u.rk)))L.e=u.e;else out.push({...u});}
+  const x0=20,w=54;
+  if(!out.length){sctx.font='13px sans-serif';sctx.fillStyle='#5b5248';['ここには','まだ地層が','ないよ'].forEach((s,i)=>sctx.fillText(s,CW/2,200+i*22));return;}
+  sctx.textAlign='left';
+  for(const u of out){
+    const y=u.s*CS,h=(u.e-u.s+1)*CS;
+    sctx.fillStyle=PAT[u.t+'_'+u.rk];sctx.fillRect(x0,y,w,h);
+    sctx.strokeStyle='#3a332b';sctx.lineWidth=1;sctx.strokeRect(x0+.5,y+.5,w-1,h-1);
+    if(h>=12){sctx.fillStyle='#2e2a24';sctx.font=(h>=16?'bold 14px':'12px')+' sans-serif';sctx.fillText(u.rk?ROCKNAME[u.t]:NAME[u.t],x0+w+6,y+h/2+5);}
+  }
+  for(const cr of creatures){
+    if(cr.state!=='rest'||cr.gone)continue;
+    if(Math.abs(cr.x/CS-selCol)<=KIND[cr.kind].hw*0.8/CS+1)drawCreature(sctx,cr,x0+w/2,cr.y,0.62);
+  }
+  sctx.fillStyle='#7a7064';sctx.font='11px sans-serif';sctx.textAlign='center';
+  sctx.fillText('↑上（新しい）',CW/2,out[0].s*CS-8>56?out[0].s*CS-8:56);
+}
+
+/* ---------- render ---------- */
+function render(){
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#eaf4fb';ctx.fillRect(0,0,W,WT*CS);
+  const g=ctx.createLinearGradient(0,WT*CS,0,H);g.addColorStop(0,'#a4d3ef');g.addColorStop(1,'#4f8fbf');
+  ctx.fillStyle=g;ctx.fillRect(0,WT*CS,W,H-WT*CS);
+  ctx.drawImage(gcan,0,0,W,H);
+  for(const p of parts){
+    const x=p.x*CS,y=p.y*CS;
+    if(p.t===GRAVEL){ctx.fillStyle='#857c72';ctx.beginPath();ctx.arc(x,y,2.6,0,6.2832);ctx.fill();}
+    else if(p.t===SAND){ctx.fillStyle='#d8b56c';ctx.fillRect(x-1,y-1,2.2,2.2);}
+    else{ctx.fillStyle='rgba(125,88,58,.5)';ctx.fillRect(x-1,y-1,2,2);}
+  }
+  for(const cr of creatures)drawCreature(ctx,cr,cr.x,cr.y,1);
+  // water surface
+  const sy=WT*CS;ctx.strokeStyle='rgba(255,255,255,.85)';ctx.lineWidth=2;ctx.beginPath();
+  for(let x=0;x<=W;x+=8){const y=sy+Math.sin(x*0.05+frame*0.1)*(pour?2:0.7);x?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.stroke();
+  // gutter
+  ctx.fillStyle='#8a7a66';ctx.beginPath();ctx.moveTo(0,22);ctx.lineTo(60,52);ctx.lineTo(60,60);ctx.lineTo(0,32);ctx.closePath();ctx.fill();
+  if(pour){
+    ctx.strokeStyle='rgba(150,112,78,.9)';ctx.lineCap='round';ctx.lineWidth=5;
+    ctx.beginPath();ctx.moveTo(0,25);ctx.lineTo(57,53);ctx.stroke();
+    ctx.lineWidth=6;ctx.beginPath();ctx.moveTo(57,55);ctx.quadraticCurveTo(66+Math.sin(frame*.3)*1.5,62,62,sy);ctx.stroke();
+    ctx.strokeStyle='rgba(255,255,255,.7)';ctx.lineWidth=1.5;
+    for(let k=0;k<3;k++){ctx.beginPath();ctx.arc(62,sy,6+((frame*0.6+k*6)%18),Math.PI*1.1,Math.PI*1.9);ctx.stroke();}
+  }
+  ctx.fillStyle='#5b4f42';ctx.font='12px sans-serif';ctx.textAlign='left';ctx.fillText('とい',8,52);
+  ctx.fillText('水そう（横から見たところ）',W-170,18);
+  // glass
+  ctx.strokeStyle='rgba(255,255,255,.65)';ctx.lineWidth=3;ctx.beginPath();
+  ctx.moveTo(1.5,sy-26);ctx.lineTo(1.5,H-1.5);ctx.lineTo(W-1.5,H-1.5);ctx.lineTo(W-1.5,sy-26);ctx.stroke();
+  // boring marker
+  if(selCol>=0){
+    const x=selCol*CS+2,top=surfaceRow(selCol)*CS;
+    ctx.save();ctx.setLineDash([5,4]);ctx.strokeStyle='#ff3b3b';ctx.lineWidth=2;
+    ctx.beginPath();ctx.moveTo(x,Math.min(top,H)-12);ctx.lineTo(x,H);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle='#ff3b3b';ctx.beginPath();const ty=Math.min(top,H)-12;ctx.moveTo(x-6,ty-10);ctx.lineTo(x+6,ty-10);ctx.lineTo(x,ty);ctx.fill();ctx.restore();
+  }
+  // time overlay
+  if(timeAnim){
+    const f=timeAnim.f,a=f<80?f/80*0.7:Math.max(0,(150-f)/70*0.7);
+    ctx.fillStyle=`rgba(30,22,14,${a})`;ctx.fillRect(0,0,W,H);
+    if(f<125){
+      ctx.globalAlpha=Math.min(1,a/0.5);ctx.fillStyle='#fff';ctx.textAlign='center';
+      ctx.font='bold 26px sans-serif';ctx.fillText('⏳ 長い長い時間がすぎていく…',W/2,H/2-14);
+      ctx.font='bold 34px sans-serif';ctx.fillText(f<30?'1万年…':f<60?'10万年…':'100万年…',W/2,H/2+32);
+      ctx.globalAlpha=1;
+    }
+  }
+}
+
+/* ---------- UI helpers ---------- */
+const msgEl=$('msg'),logEl=$('log'),statusEl=$('status');
+function setMsg(h){msgEl.innerHTML=h;}
+function addLog(s){const li=document.createElement('li');li.textContent=s;logEl.appendChild(li);logEl.scrollTop=logEl.scrollHeight;}
+function setButtons(){
+  $('pourBtn').disabled=!!timeAnim||full;$('timeBtn').disabled=!!timeAnim;
+  document.querySelectorAll('[data-kind]').forEach(b=>b.disabled=!!timeAnim||full);
+}
+function counts(){const c=[0,0,0,0];for(const p of parts)c[p.t]++;return c;}
+function updateStatus(){
+  const c=counts();
+  const s=`水の中をしずんでいるつぶ：<span class="pill"><i style="background:#857c72"></i>れき ${c[1]}</span><span class="pill"><i style="background:#d8b56c"></i>砂 ${c[2]}</span><span class="pill"><i style="background:#7d583a"></i>泥 ${c[3]}</span>`;
+  if(s!==lastStatus){statusEl.innerHTML=s;lastStatus=s;}
+}
+function watch(){
+  if(!pourWatch||pour)return;
+  const c=counts();let changed=false;
+  for(const t of [1,2,3]){
+    if(pourWatch.has[t]&&!pourWatch.done[t]&&c[t]===0){
+      pourWatch.done[t]=true;pourWatch.n++;changed=true;
+      pourWatch.lines.push(`<p>${['','①','②','③'][pourWatch.n]} 「<b>${NAME[t]}</b>」がしずみきった！${EXPL[t]}</p>`);
+    }
+  }
+  if(!changed)return;
+  let h=pourWatch.lines.join('');
+  const all=[1,2,3].every(t=>!pourWatch.has[t]||pourWatch.done[t]);
+  if(all){
+    if(pourWatch.has[1]&&pourWatch.has[2]&&pourWatch.has[3])h+='<p>👉 <b>下にれき、その上に砂、いちばん上に泥</b>が積もっているかな？ 地層をタップして柱状図で確かめよう。</p>';
+    else h+='<p>👉 しずみきりました。地層をタップして、柱状図で確かめよう。</p>';
+    if(pourWatch.no>=2)h+='<p>前に流したときの層の上に、新しい層が重なったね。</p>';
+    pourWatch=null;
+  }
+  setMsg(h);
+}
+
+/* ---------- actions ---------- */
+function startPour(){
+  if(timeAnim||full)return;
+  const types=[];if($('cG').checked)types.push(1);if($('cS').checked)types.push(2);if($('cM').checked)types.push(3);
+  if(!types.length){setMsg('<p>流れこむ土を1つ以上えらんでね。</p>');return;}
+  const r=document.querySelector('input[name=flow]:checked');
+  pour={types,flow:parseFloat(r.value),steps:90,left:90,acc:{1:0,2:0,3:0}};
+  eventNo++;
+  addLog(`🌊 ${eventNo}回目：水のいきおい「${r.dataset.label}」（${types.map(t=>NAME[t]).join('・')}）`);
+  pourWatch={has:{1:types.includes(1),2:types.includes(2),3:types.includes(3)},done:{},lines:[],n:0,no:eventNo};
+  setMsg(`<p>${eventNo}回目の水を流しました。どのつぶが先にしずみきるか、よく見てみよう！</p>`);
+}
+function reset(){
+  grid.fill(0);rock.fill(0);parts=[];creatures=[];pour=null;timeAnim=null;eventNo=0;pourWatch=null;full=false;selCol=-1;
+  gctx.clearRect(0,0,W,H);logEl.innerHTML='';colDirty=true;
+  setMsg('<p>まずは「れき・砂・泥」をまぜて、🌊 水を流してみよう！</p>');setButtons();
+}
+function stepSim(){emit();stepParts();stepCreatures();}
+
+$('pourBtn').addEventListener('click',startPour);
+$('timeBtn').addEventListener('click',startTime);
+$('resetBtn').addEventListener('click',reset);
+document.querySelectorAll('[data-kind]').forEach(b=>b.addEventListener('click',()=>addCreature(b.dataset.kind)));
+document.querySelectorAll('input[name=spd]').forEach(r=>r.addEventListener('change',()=>{speed=parseFloat(r.value);}));
+main.addEventListener('pointerdown',e=>{
+  const rc=main.getBoundingClientRect(),x=(e.clientX-rc.left)*W/rc.width;
+  selCol=Math.max(1,Math.min(COLS-2,(x/CS)|0));colDirty=true;drawColumn();colDirty=false;
+});
+
+function loop(){
+  frame++;
+  if(!timeAnim){
+    acc+=speed;let n=0;while(acc>=1&&n<10){stepSim();acc-=1;n++;}if(acc>1)acc=1;
+  }else{
+    timeAnim.f++;if(timeAnim.f===80)applyTime();if(timeAnim.f>=150){timeAnim=null;setButtons();}
+  }
+  for(const cr of creatures)if(cr.gone)cr.alpha-=0.015;
+  if(creatures.some(c=>c.alpha<=0)){creatures=creatures.filter(c=>c.alpha>0);colDirty=true;}
+  render();
+  if(colDirty&&frame%8===0){drawColumn();colDirty=false;}
+  if(frame%4===0)updateStatus();
+  watch();
+  requestAnimationFrame(loop);
+}
+reset();drawColumn();loop();
+})();
+</script>
+</body>
+</html>
